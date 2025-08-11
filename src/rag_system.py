@@ -9,8 +9,6 @@ from neo4j import AsyncGraphDatabase
 from src.config import Settings
 from src.core.embeddings import OpenAIEmbeddings
 from src.core.knn_graph import KNNGraph
-from src.core.query_classifier import QueryClassifier, QueryType
-from src.core.reranker import Reranker
 
 
 class RAGSystem:
@@ -42,9 +40,6 @@ class RAGSystem:
             max_neighbors=5  # Fewer but higher quality neighbors
         )
         
-        # Initialize query classifier and reranker
-        self.query_classifier = QueryClassifier()
-        self.reranker = Reranker(similarity_threshold=0.7)
     
     async def vector_search_chunks(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Pure vector search on document chunks (98% accuracy for fact-based queries)."""
@@ -298,85 +293,6 @@ class RAGSystem:
         merged_results.sort(key=lambda x: x["similarity"], reverse=True)
         return merged_results[:top_k]
     
-    async def hybrid_search_advanced(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
-        """Advanced hybrid search with query classification and reranking.
-        
-        This method:
-        1. Classifies the query to determine optimal retrieval strategy
-        2. Runs adaptive retrieval with dynamic weights
-        3. Applies reranking and result optimization
-        """
-        
-        # Classify query
-        query_type, weights = self.query_classifier.classify(query)
-        retrieval_params = self.query_classifier.get_retrieval_params(query_type)
-        
-        logger.debug(f"Query type: {query_type.value}, Weights: {weights}")
-        
-        # Get query embedding for reranking
-        query_embedding = await self.embedding_gen([query])
-        query_embedding = query_embedding[0].tolist()
-        
-        # Run searches with adaptive parameters
-        vector_results = await self.vector_search_chunks(
-            query, 
-            top_k=retrieval_params["initial_chunks"] * 2
-        )
-        
-        # For graph search, use optimized parameters
-        graph_results = await self.graph_search_chunks_optimized(
-            query,
-            initial_chunks=retrieval_params["initial_chunks"],
-            traversal_depth=retrieval_params["traversal_depth"],
-            similarity_threshold=retrieval_params["similarity_threshold"],
-            max_chunks=retrieval_params["max_graph_chunks"]
-        )
-        
-        # Merge results with adaptive weights
-        all_chunks = []
-        chunk_map = {}
-        
-        # Add vector results
-        for result in vector_results:
-            chunk_id = result["chunk_id"]
-            if chunk_id not in chunk_map:
-                chunk_map[chunk_id] = {
-                    "chunk_id": chunk_id,
-                    "content": result["content"],
-                    "similarity": result["similarity"] * weights["vector"],
-                    "source": "vector",
-                    "embedding": None  # Would need to fetch if needed
-                }
-            else:
-                chunk_map[chunk_id]["similarity"] += result["similarity"] * weights["vector"]
-                chunk_map[chunk_id]["source"] = "both"
-        
-        # Add graph results
-        for result in graph_results:
-            chunk_id = result["chunk_id"]
-            if chunk_id not in chunk_map:
-                chunk_map[chunk_id] = {
-                    "chunk_id": chunk_id,
-                    "content": result["content"],
-                    "similarity": result["similarity"] * weights["graph"],
-                    "source": "graph",
-                    "embedding": None
-                }
-            else:
-                chunk_map[chunk_id]["similarity"] += result["similarity"] * weights["graph"]
-                chunk_map[chunk_id]["source"] = "both"
-        
-        # Convert to list
-        all_chunks = list(chunk_map.values())
-        
-        # Apply reranking
-        reranked_chunks = self.reranker.rerank_results(
-            query_embedding,
-            all_chunks,
-            query_type.value
-        )
-        
-        return reranked_chunks[:top_k]
     
     async def query(self, question: str, search_mode: str = "graph", top_k: int = 5) -> str:
         """
@@ -388,7 +304,6 @@ class RAGSystem:
                 - "vector": Pure vector search (baseline)
                 - "graph": Graph traversal using SIMILAR relationships (best for split info)
                 - "hybrid": Combination of vector and graph (balanced)
-                - "hybrid_advanced": Advanced hybrid with query classification and reranking
             top_k: Number of results to retrieve
         
         Returns:
@@ -402,8 +317,6 @@ class RAGSystem:
             search_results = await self.graph_search_chunks(question, top_k)
         elif search_mode == "hybrid":
             search_results = await self.hybrid_search(question, top_k)
-        elif search_mode == "hybrid_advanced":
-            search_results = await self.hybrid_search_advanced(question, top_k)
         else:
             # Default to graph mode for best accuracy
             search_results = await self.graph_search_chunks(question, top_k)

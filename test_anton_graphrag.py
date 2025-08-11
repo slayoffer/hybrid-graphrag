@@ -203,8 +203,8 @@ async def main():
     
     all_results = {}
     
-    # Test all modes including advanced hybrid
-    for mode in ["vector", "graph", "hybrid", "hybrid_advanced"]:
+    # Test all modes
+    for mode in ["vector", "graph", "hybrid"]:
         mode_results = await test_mode(rag, mode, TEST_QUESTIONS)
         all_results[mode] = mode_results
     
@@ -213,7 +213,7 @@ async def main():
     logger.info("RESULTS SUMMARY")
     logger.info("=" * 80)
     
-    for mode in ["vector", "graph", "hybrid", "hybrid_advanced"]:
+    for mode in ["vector", "graph", "hybrid"]:
         results = all_results[mode]
         
         by_difficulty = {}

@@ -9,10 +9,9 @@ This system implements a true GraphRAG architecture using K-Nearest Neighbors (K
 ## Key Features
 
 - **KNN Graph Construction**: Builds SIMILAR relationships between chunks based on embedding similarity
-- **Multiple Search Modes**: Vector, Graph, Hybrid, and Advanced Hybrid retrieval
-- **Query Classification**: Adaptive retrieval strategy based on query type
-- **Document Reranking**: Cross-encoder scoring with similarity filtering
+- **Multiple Search Modes**: Vector, Graph, and Hybrid retrieval strategies
 - **Optimized Chunking**: 250-char chunks with 150-char overlap for better precision
+- **Graph Traversal**: Depth-limited traversal with similarity decay
 - **Neo4j Integration**: Efficient graph storage and traversal
 
 ## Performance Results
@@ -24,9 +23,6 @@ Testing on Anton Evseev's profile document (10 questions):
 | Vector Search | 93.25% | ~1500ms |
 | Graph Search | 93.25% | ~2000ms |
 | Hybrid Search | 91.92% | ~2500ms |
-| Hybrid Advanced | 36.29% | ~3000ms |
-
-*Note: Hybrid Advanced mode is experimental and performs poorly due to sparse graph connectivity at high similarity thresholds.*
 
 ## Setup
 
