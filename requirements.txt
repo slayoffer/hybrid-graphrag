@@ -1,0 +1,86 @@
+# Core dependencies
+python-dotenv==1.0.1
+pydantic==2.6.0
+pydantic-settings==2.1.0
+
+# LightRAG framework (will be installed from source in Docker)
+# lightrag-hku==0.1.0  # Commented as we clone from source
+
+# OpenAI for LLM and embeddings
+openai==1.12.0
+
+# Neo4j graph database
+neo4j==5.17.0
+py2neo==2021.2.4
+
+# Document processing
+markdown==3.5.2
+beautifulsoup4==4.12.3
+pypdf==4.0.1
+docx2txt==0.8
+unstructured[md]==0.12.4
+
+# Vector storage (optional, for hybrid mode)
+chromadb==0.4.22
+
+# Text processing and NLP
+tiktoken==0.5.2
+nltk==3.8.1
+spacy==3.7.4
+transformers==4.38.0
+
+# Async support
+aiohttp==3.9.3
+asyncio==3.4.3
+aiofiles==23.2.1
+httpx==0.26.0
+
+# API server dependencies
+fastapi==0.109.2
+uvicorn==0.27.1
+pydantic==2.6.0
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.5
+pytest-cov==4.1.0
+
+# Logging and monitoring
+loguru==0.7.2
+tqdm==4.66.2
+rich==13.7.0
+
+# Data analysis and visualization
+numpy==1.26.4
+pandas==2.2.0
+networkx==3.2.1
+matplotlib==3.8.2
+seaborn==0.13.2
+plotly==5.18.0
+
+# Graph metrics and analysis
+scikit-learn==1.4.0
+scipy==1.12.0
+
+# Jupyter support (for development profile)
+jupyter==1.0.0
+jupyterlab==4.1.0
+ipython==8.21.0
+ipywidgets==8.1.2
+
+# Utilities
+pyyaml==6.0.1
+click==8.1.7
+python-multipart==0.0.9
+tenacity==8.2.3
+diskcache==5.6.3
+
+# Evaluation metrics
+ragas==0.1.7
+langchain==0.1.9
+langchain-community==0.0.24
+
+# LangChain for advanced entity extraction
+langchain-experimental==0.0.47
+langchain-openai==0.0.5
+langchain-core==0.1.23

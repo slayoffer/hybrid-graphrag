@@ -1,0 +1,206 @@
+services:
+  # Neo4j graph database with vector support
+  neo4j-lightrag:
+    image: neo4j:5.13-community
+    container_name: neo4j-lightrag-graphrag-testing
+    ports:
+      - "7476:7474"  # Browser interface
+      - "7689:7687"  # Bolt protocol
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-lightrag123}
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      
+      # Memory optimization for vector operations (reduced for local testing)
+      - NEO4J_dbms_memory_pagecache_size=${NEO4J_MEMORY_PAGECACHE:-2G}
+      - NEO4J_dbms_memory_heap_initial__size=${NEO4J_MEMORY_HEAP_INITIAL:-1G}
+      - NEO4J_dbms_memory_heap_max__size=${NEO4J_MEMORY_HEAP_MAX:-2G}
+      
+      # Vector-specific JVM tuning
+      - NEO4J_server_jvm_additional=-XX:+UseG1GC
+      
+      # Connection and security settings
+      - NEO4J_dbms_connector_bolt_advertised__address=localhost:7689
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+      - NEO4J_PLUGINS=["apoc"]
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # Reduced for local testing
+        reservations:
+          memory: 2G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    networks:
+      - lightrag-network
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD:-lightrag123}", "MATCH () RETURN count(*) LIMIT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # LightRAG application
+  lightrag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lightrag-testing-app
+    depends_on:
+      neo4j-lightrag:
+        condition: service_healthy
+    ports:
+      - "9621:9621"  # API server port
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./examples:/app/examples
+      - ./tests:/app/tests
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./rag_storage:/app/rag_storage
+    environment:
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      
+      # Neo4j Configuration
+      - NEO4J_URI=bolt://neo4j-lightrag:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-lightrag123}
+      - NEO4J_WORKSPACE=${NEO4J_WORKSPACE:-testing}
+      
+      # LightRAG Configuration
+      - LIGHTRAG_WORKING_DIR=/app/rag_storage
+      - LIGHTRAG_GRAPH_STORAGE=Neo4JStorage
+      - LIGHTRAG_VECTOR_STORAGE=Neo4JStorage
+      - LIGHTRAG_KV_STORAGE=Neo4JStorage
+      - LIGHTRAG_DOC_STORAGE=JsonDocStatusStorage
+      - LIGHTRAG_LLM_CONTEXT_SIZE=32768
+      - LIGHTRAG_MAX_ENTITY_TOKENS=15000
+      - LIGHTRAG_MAX_RELATIONSHIP_TOKENS=10000
+      
+      # Unified Neo4j Vector Storage Configuration
+      - UNIFIED_NEO4J_STORAGE=${UNIFIED_NEO4J_STORAGE:-true}
+      - NEO4J_VECTOR_DIMENSIONS=${NEO4J_VECTOR_DIMENSIONS:-3072}
+      - NEO4J_VECTOR_SIMILARITY=${NEO4J_VECTOR_SIMILARITY:-cosine}
+      - NEO4J_VECTOR_QUANTIZATION=${NEO4J_VECTOR_QUANTIZATION:-true}
+      - NEO4J_HNSW_M=${NEO4J_HNSW_M:-16}
+      - NEO4J_HNSW_EF_CONSTRUCTION=${NEO4J_HNSW_EF_CONSTRUCTION:-200}
+      
+      # Query Configuration
+      - DEFAULT_QUERY_MODE=${DEFAULT_QUERY_MODE:-mix}
+      - DEFAULT_TOP_K=${DEFAULT_TOP_K:-100}
+      - ENABLE_RERANK=${ENABLE_RERANK:-true}
+      
+      # Performance Configuration
+      - MAX_CONNECTION_POOL_SIZE=${MAX_CONNECTION_POOL_SIZE:-100}
+      - BATCH_SIZE=${BATCH_SIZE:-100}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Entity Extraction Configuration
+      - ENTITY_TYPES=${ENTITY_TYPES:-organization,vendor,product,platform,feature,integration,standard,vulnerability,methodology,decision,requirement,comparison}
+      - GLEANING_ITERATIONS=${GLEANING_ITERATIONS:-3}
+      
+    networks:
+      - lightrag-network
+    restart: unless-stopped
+    command: python -m src.main
+
+  # LightRAG API Server (optional, for REST API access)
+  lightrag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lightrag-api-server
+    depends_on:
+      neo4j-lightrag:
+        condition: service_healthy
+    ports:
+      - "8080:8080"  # REST API port
+    volumes:
+      - ./rag_storage:/app/rag_storage
+      - ./config:/app/config
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEO4J_URI=bolt://neo4j-lightrag:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-lightrag123}
+      - NEO4J_WORKSPACE=${NEO4J_WORKSPACE:-testing}
+      - API_PORT=8080
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN:-lightrag-api-token}
+    networks:
+      - lightrag-network
+    command: python -m lightrag.api.main --port 8080
+    profiles:
+      - api
+
+  # Jupyter notebook for interactive testing
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lightrag-jupyter
+    depends_on:
+      - neo4j-lightrag
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/app/notebooks
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./rag_storage:/app/rag_storage
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NEO4J_URI=bolt://neo4j-lightrag:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-lightrag123}
+      - NEO4J_WORKSPACE=${NEO4J_WORKSPACE:-testing}
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-lightrag-testing}
+    networks:
+      - lightrag-network
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+    profiles:
+      - development
+
+  # Neo4j Browser (optional, for graph visualization)
+  neo4j-browser:
+    image: neo4j:5.13-community
+    container_name: neo4j-browser-only
+    ports:
+      - "7475:7474"  # Alternative browser port
+    environment:
+      - NEO4J_AUTH=none
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_dbms_mode=SINGLE
+      - NEO4J_dbms_connector_bolt_enabled=false
+    networks:
+      - lightrag-network
+    profiles:
+      - visualization
+
+networks:
+  lightrag-network:
+    driver: bridge
+    name: lightrag-testing-network
+
+volumes:
+  neo4j_data:
+    name: neo4j-lightrag-data
+    driver: local
+  neo4j_logs:
+    name: neo4j-lightrag-logs
+    driver: local
+  neo4j_import:
+    name: neo4j-lightrag-import
+    driver: local
+  neo4j_plugins:
+    name: neo4j-lightrag-plugins
+    driver: local
